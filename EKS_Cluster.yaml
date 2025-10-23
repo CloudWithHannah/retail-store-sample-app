@@ -1,0 +1,111 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  This template provisions the EKS Cluster and a Managed Node Group
+  by importing resources from the VPC stack.
+
+Parameters:
+  VPCStackName:
+    Type: String
+    Description: >
+      The name of the CloudFormation stack that created the VPC
+
+  ClusterVersion:
+    Type: String
+    Default: '1.29'
+    Description: The Kubernetes version for the EKS cluster.
+
+  InstanceType: 
+    Description: The EC2 instance type for the nodes (e.g., t3.medium). 
+    Type: String 
+    Default: t3.medium
+
+Resources:
+  # 1. EKS Cluster (The "Brain")
+
+  EKSCluster:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: !Sub "${VPCStackName}-EKSCluster"
+      Version: !Ref ClusterVersion
+
+      # This is where we import the VPC info
+      RoleArn: !ImportValue
+        Fn::Sub: "${VPCStackName}-EKSClusterRoleArn"
+      ResourcesVpcConfig:
+        SubnetIds:
+          - !Select [ 0, !Split [ ',', !ImportValue { Fn::Sub: "${VPCStackName}-PublicSubnetIDs" } ] ]
+          - !Select [ 1, !Split [ ',', !ImportValue { Fn::Sub: "${VPCStackName}-PublicSubnetIDs" } ] ]
+          - !Select [ 0, !Split [ ',', !ImportValue { Fn::Sub: "${VPCStackName}-PrivateSubnetIDs" } ] ]
+          - !Select [ 1, !Split [ ',', !ImportValue { Fn::Sub: "${VPCStackName}-PrivateSubnetIDs" } ] ]
+          - !Select [ 2, !Split [ ',', !ImportValue { Fn::Sub: "${VPCStackName}-PrivateSubnetIDs" } ] ]
+          - !Select [ 3, !Split [ ',', !ImportValue { Fn::Sub: "${VPCStackName}-PrivateSubnetIDs" } ] ]
+        
+        # This tells EKS which SGs to use for its own networking
+        SecurityGroupIds:
+          - !ImportValue
+            Fn::Sub: "${VPCStackName}-MyServerSecurityGroup"
+        EndpointPublicAccess: true
+        EndpointPrivateAccess: false
+
+  # 2. EKS Node Group (The "Workers")
+
+  EKSNodeGroup:
+    Type: AWS::EKS::Nodegroup
+    Properties:
+      ClusterName: !Ref EKSCluster
+      NodegroupName: !Sub "${VPCStackName}-NodeGroup"
+      InstanceTypes:
+        - !Ref InstanceType
+      NodeRole: !ImportValue
+        Fn::Sub: "${VPCStackName}-EKSNodeRoleArn"
+      # Workers live in your private subnets
+      Subnets:
+        - !Select [ 0, !Split [ ',', !ImportValue { Fn::Sub: "${VPCStackName}-PrivateSubnetIDs" } ] ]
+        - !Select [ 1, !Split [ ',', !ImportValue { Fn::Sub: "${VPCStackName}-PrivateSubnetIDs" } ] ]
+        - !Select [ 2, !Split [ ',', !ImportValue { Fn::Sub: "${VPCStackName}-PrivateSubnetIDs" } ] ]
+        - !Select [ 3, !Split [ ',', !ImportValue { Fn::Sub: "${VPCStackName}-PrivateSubnetIDs" } ] ]
+      ScalingConfig:
+        MinSize: 2
+        DesiredSize: 2
+        MaxSize: 4
+      RemoteAccess:
+        Ec2SshKey: "InnovateMart"
+        # This SG must allow SSH access
+        SourceSecurityGroups:
+          - !ImportValue
+            Fn::Sub: "${VPCStackName}-MySSHSecurityGroup"
+  
+  ReadOnlyDevUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: dev-readonly-user
+
+  ReadOnlyDevUserKey:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref ReadOnlyDevUser
+
+Outputs:
+  EKSClusterName:
+    Description: The name of the EKS cluster
+    Value: !Ref EKSCluster
+    Export:
+      Name: !Sub "${AWS::StackName}-EKSClusterName"
+
+  EKSClusterEndpoint:
+    Description: The endpoint for the EKS cluster
+    Value: !GetAtt EKSCluster.Endpoint
+    Export:
+      Name: !Sub "${AWS::StackName}-EKSClusterEndpoint"
+  
+  ReadOnlyDevUserARN:
+    Description: "ARN of the read-only developer user"
+    Value: !GetAtt ReadOnlyDevUser.Arn
+  
+  ReadOnlyDevUserAccessKey:
+    Description: "Access key for the read-only user"
+    Value: !Ref ReadOnlyDevUserKey
+
+  ReadOnlyDevUserSecretKey:
+    Description: "Secret key for the read-only user"
+    Value: !GetAtt ReadOnlyDevUserKey.SecretAccessKey

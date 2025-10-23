@@ -1,0 +1,41 @@
+name: Deploy EKS Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/*' # This runs on the main branch and any branch starting with 'feature/'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-north-1
+
+      # This step "plans" by creating a changeset but doesn't execute it
+      - name: CloudFormation Plan (for feature branches)
+        if: startsWith(github.ref, 'refs/heads/feature/')
+        run: |
+          aws cloudformation deploy \
+            --stack-name Bedrock-cluster \
+            --template-file EKS_Cluster.yaml \
+            --parameter-overrides VPCStackName="Project-Bedrock" \
+            --no-execute-changeset \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
+
+      - name: CloudFormation Apply (for main branch)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          aws cloudformation deploy \
+            --stack-name Bedrock-cluster \
+            --template-file EKS_Cluster.yaml \
+            --parameter-overrides VPCStackName="Project-Bedrock" \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM

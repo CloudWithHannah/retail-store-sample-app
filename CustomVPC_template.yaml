@@ -1,0 +1,481 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >
+  This template provisions the CORE requirements for Project Bedrock:
+  A VPC with public/private subnets, gateways, route tables,
+  essential EKS IAM roles, and necessary Security Groups for the EKS cluster stack.
+
+Parameters:
+  VpcCIDR:
+    Description: The CIDR block for the VPC (e.g., 10.0.0.0/16).
+    Type: String
+    Default: 10.0.0.0/16
+
+  SubnetCIDR:
+    Description: The CIDR block for the VPC (e.g., 10.0.0.0/16).
+    Type: String
+    Default: 10.0.0.0/24
+
+  InstanceType: 
+    Description: The EC2 instance type (e.g., t2.micro). 
+    Type: String 
+    Default: t3.micro 
+    AllowedValues: 
+      - t3.micro 
+      - t3.small 
+      - t3.medium 
+    ConstraintDescription: Must be a valid EC2 instance type.
+
+Resources:
+  MyVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock:
+        Ref: VpcCIDR
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-VPC"
+
+# Attaching Internet Gateways
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-IGW"
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: 
+        Ref: MyVPC
+      InternetGatewayId: 
+        Ref: InternetGateway
+
+# Public Subnets
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: 
+        Ref: MyVPC
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: 'true'
+      AvailabilityZone: eu-north-1a
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-PublicSubnetA"
+        # Tag for ALB discovery (from bonus phase, good practice to include)
+        - Key: kubernetes.io/role/elb
+          Value: '1'
+        - Key: kubernetes.io/cluster/${AWS::StackName}-EKSCluster
+          Value: shared
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: 
+        Ref: MyVPC
+      CidrBlock: 10.0.2.0/24
+      MapPublicIpOnLaunch: 'true'
+      AvailabilityZone: eu-north-1b
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-PublicSubnetB"
+        - Key: kubernetes.io/role/elb
+          Value: '1'
+        - Key: kubernetes.io/cluster/${AWS::StackName}-EKSCluster
+          Value: shared
+
+# Private Subnets 
+  PrivateSubnetA1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: 
+        Ref: MyVPC
+      CidrBlock: 10.0.10.0/24
+      MapPublicIpOnLaunch: 'false'
+      AvailabilityZone: eu-north-1a
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-PrivateSubnetA1"
+        # Tag for internal ALB discovery (good practice)
+        - Key: kubernetes.io/role/internal-elb
+          Value: '1'
+        - Key: kubernetes.io/cluster/${AWS::StackName}-EKSCluster
+          Value: shared
+
+  PrivateSubnetA2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: 
+        Ref: MyVPC
+      CidrBlock: 10.0.11.0/24
+      MapPublicIpOnLaunch: 'false'
+      AvailabilityZone: eu-north-1a
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-PrivateSubnetA2"
+        - Key: kubernetes.io/role/internal-elb
+          Value: '1'
+        - Key: kubernetes.io/cluster/${AWS::StackName}-EKSCluster
+          Value: shared
+
+  PrivateSubnetB1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: 
+        Ref: MyVPC
+      CidrBlock: 10.0.20.0/24
+      MapPublicIpOnLaunch: 'false'
+      AvailabilityZone: eu-north-1b
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-PrivateSubnetB1"
+        - Key: kubernetes.io/role/internal-elb
+          Value: '1'
+        - Key: kubernetes.io/cluster/${AWS::StackName}-EKSCluster
+          Value: shared
+
+  PrivateSubnetB2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: 
+        Ref: MyVPC
+      CidrBlock: 10.0.21.0/24
+      MapPublicIpOnLaunch: 'false'
+      AvailabilityZone: eu-north-1b
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-PrivateSubnetB2"
+        - Key: kubernetes.io/role/internal-elb
+          Value: '1'
+        - Key: kubernetes.io/cluster/${AWS::StackName}-EKSCluster
+          Value: shared
+
+#Public Route Table and Route
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: 
+        Ref: MyVPC
+      Tags:
+        - Key: Name
+          Value: PublicRouteTable
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: 
+        Ref: PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: 
+        Ref: InternetGateway
+
+
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: 
+        Ref: PublicSubnetA
+      RouteTableId: 
+        Ref: PublicRouteTable
+
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: 
+        Ref: PublicSubnetB
+      RouteTableId: 
+        Ref: PublicRouteTable
+
+# ALB Security Group     
+  MyALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP, HTTPS, and SSH traffic
+      VpcId: 
+        Ref: MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0 # Allows HTTP traffic
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0 # Allows HTTPS traffic
+      Tags:
+        - Key: Name
+          Value: MyALBSecurityGroup
+
+# SSH Secuirity Group for Maintenance
+  MySSHSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH traffic
+      VpcId: 
+        Ref: MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0 # Allows SSH from anywhere (adjust for security)
+      Tags:
+        - Key: Name
+          Value: MySSHSecurityGroup
+
+# Server Security Group
+  MyServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP and HTTPS traffic
+      VpcId: 
+        Ref: MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupID: 
+            Ref: MySSHSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupID: 
+            Ref: MyALBSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupID: 
+            Ref: MyALBSecurityGroup
+      Tags:
+        - Key: Name
+          Value: MySecurityGroup
+
+# My EC2 instance
+
+  MyEC2InstanceA:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: 
+        Ref: InstanceType
+      ImageId: "ami-0a716d3f3b16d290c" # Replace with the desired AMI
+      SubnetId: 
+        Ref: PublicSubnetA
+      KeyName: "InnovateMart" # Replace with name of your key pair
+      SecurityGroupIds:
+      - !Ref MyServerSecurityGroup
+      - !Ref MySSHSecurityGroup
+      Tags:
+        - Key: Name
+          Value: MyInstance
+
+  MyEC2InstanceB:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: 
+        Ref: InstanceType
+      ImageId: "ami-0a716d3f3b16d290c" # Replace with the desired AMI
+      SubnetId: 
+        Ref: PublicSubnetB
+      KeyName: "InnovateMart" # Replace with name of your key pair
+      SecurityGroupIds:
+      - !Ref MyServerSecurityGroup
+      - !Ref MySSHSecurityGroup
+      Tags:
+        - Key: Name
+          Value: MyInstance
+
+# NAT GATEWAYS
+
+# Elastic IPs
+  MyNATGateway1EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-NATGateway1-EIP"
+  
+  MyNATGateway2EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-NATGateway2-EIP"
+  
+# NATGATEway Actual Resources
+  MyNATGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt MyNATGateway1EIP.AllocationId
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-NATGateway1"
+
+  MyNATGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt MyNATGateway2EIP.AllocationId
+      SubnetId: !Ref PublicSubnetB
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-NATGateway2"
+  
+# Route Table
+
+  PrivateRouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: PrivateRouteTableA
+
+  PrivateRouteA:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref MyNATGateway1
+      RouteTableId: !Ref PrivateRouteTableA
+
+  PrivateSubnetA1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableA
+      SubnetId: !Ref PrivateSubnetA1
+
+  PrivateSubnetA2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableA
+      SubnetId: !Ref PrivateSubnetA2
+
+  PrivateRouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: PrivateRouteTableB
+
+  PrivateRouteB:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref MyNATGateway2
+      RouteTableId: !Ref PrivateRouteTableB
+
+  PrivateAppSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableB
+      SubnetId: !Ref PrivateSubnetB1
+
+  PrivateDBSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableB
+      SubnetId: !Ref PrivateSubnetB2
+
+
+  # EKS Cluster Role
+  # This role allows the EKS control plane to manage AWS resources (like LBs) on your behalf.
+  EKSClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-EKSClusterRole"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: eks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+
+  # 2. EKS Node Role
+  # This role is used by your EC2 worker nodes (in the Node Group) to register with the cluster
+  # and allow the cluster to manage them.
+  EKSNodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-EKSNodeRole"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+
+Outputs:
+  VpcId:
+    Description: The ID of the VPC
+    Value: !Ref MyVPC
+    Export:
+      Name: !Sub ${AWS::StackName}-MyVPC
+
+  PublicSubnetIds:
+    Description: A comma-separated list of public subnet IDs
+    Value: !Join
+      - ','
+      - - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicSubnetIDs"
+
+  PrivateSubnetIds:
+    Description: A comma-separated list of private subnet IDs for EKS nodes
+    Value: !Join
+      - ','
+      - - !Ref PrivateSubnetA1
+        - !Ref PrivateSubnetA2
+        - !Ref PrivateSubnetB1
+        - !Ref PrivateSubnetB2
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateSubnetIDs"
+
+  MyDBSecurityGroup:
+    Description: The name of the DB Security Group cluster
+    Value: !Ref MyDBSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-MyDBSecurityGroup"
+
+  MyALBSecurityGroup:
+    Description: The name of the ALB Security Group cluster
+    Value: !Ref MyALBSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-MyALBSecurityGroup"
+  
+  MySSHSecurityGroup:
+    Description: The name of the ALB Security Group cluster
+    Value: !Ref MySSHSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-MySSHSecurityGroup"
+  
+  MyServerSecurityGroup:
+    Description: The name of the ALB Security Group cluster
+    Value: !Ref MyServerSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-MyServerSecurityGroup"
+
+  EKSClusterRoleArn:
+    Description: The ARN of the IAM role for the EKS cluster
+    Value: !GetAtt EKSClusterRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-EKSClusterRoleArn"
+  
+  EKSNodeRoleArn:
+    Description: The ARN of the IAM role for the EKS nodes
+    Value: !GetAtt EKSNodeRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-EKSNodeRoleArn"
