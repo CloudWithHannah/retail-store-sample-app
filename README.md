@@ -176,5 +176,3 @@ We made a special AWS user (`ReadOnlyDevUser`) so developers can safely look aro
 * **Finish Phase 7:** Add the fancy AWS databases (RDS, DynamoDB) to make the app even better.
 * **Perfect the Blueprints:** Add the LBC IAM Role back into the `Project-Bedrock-Core.yaml` CloudFormation file so everything is defined in code (no manual steps!).
 * **Add Monitoring:** Set up tools like Prometheus and Grafana (or AWS CloudWatch) to keep an eye on how the app is doing.
-
-Wow, what an adventure! Building this taught us so much about AWS, EKS, networking, security, and especially troubleshooting! We're super proud to have Project Bedrock up and running. ✨
