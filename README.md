@@ -4,13 +4,13 @@
 </strong>
 </div>
 
-Hello! 👋 Ilcome to Project Bedrock! This project was all about building a super cool home on Amazon Ib Services (AWS) for InnovateMart's brand new online store. Think of it like setting up a fancy, high tech stage and backstage for a really popular online shop.
+Hello! 👋 welcome to Project Bedrock! This project was all about building a super cool home on Amazon Ib Services (AWS) for InnovateMart's brand new online store. Think of it like setting up a fancy, high tech stage and backstage for a really popular online shop.
 
 **The Big Goal:** To take the `retail-store-sample-app` (which is like a puzzle made of many small app pieces called microservices) and get it running smoothly on AWS's special service for running apps like this, called EKS (Elastic Kubernetes Service).
 
 **Who Did This Magic?** This setup was built with lots of care (and maybe a little late night coffee!) by me, a Cloud DevOps Engineer at InnovateMart. ☕
 
-**🎉 See it LIVE! 🎉:** https://bedrock.ngozi-opara-portfolio.com
+**🎉 See it LIVE! 🎉:** https://bedrock.ngozi-opara-portfolio.com (site currently down for maintenance).
 
 ---
 
